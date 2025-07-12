@@ -43,3 +43,26 @@ npm install -g @anthropic-ai/claude-code
 ### 参考资料
 - [Claude Code 官方文档](https://www.anthropic.com/claude-code)
 - [Kimi开放平台](https://platform.moonshot.cn/)
+
+## Windows系统支持（实验性）
+
+> **注意**：Windows版本脚本尚处于实验阶段，未经过充分测试（因缺乏Windows测试环境），可能存在兼容性问题。
+
+### 快速安装
+1. 下载[claude_install.bat](https://raw.githubusercontent.com/PengJunchen/claude-kimi-cc/refs/heads/main/claude_install.bat)文件
+2. 右键点击文件，选择“以管理员身份运行”
+3. 按照脚本提示完成安装（包括代理配置选项）
+
+### 使用方法
+安装完成后，在命令提示符或PowerShell中输入：
+```shell
+claude
+```
+
+### 注意事项
+- 脚本需要管理员权限运行
+- 若遇到代理配置问题，可尝试手动设置npm代理：
+  ```shell
+  npm config set proxy http://proxy-url:port
+  npm config set https-proxy http://proxy-url:port
+  ```
