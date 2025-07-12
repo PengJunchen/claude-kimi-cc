@@ -17,6 +17,12 @@
    - （否则使用claude可能遇到限制，需要提升账号等级）
 
 ## 快速安装
+
+### 代理配置说明
+脚本运行时会询问是否使用代理，选择 `yes` 后将提供两种代理模式：
+- **全局代理**：影响所有命令，仅在脚本执行期间临时生效，脚本退出后自动清除
+- **npm-only代理**：仅影响npm包管理，配置会持久保存在npm设置中
+
 ```shell
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/PengJunchen/claude-kimi-cc/refs/heads/main/claude_install.sh)"
 ```

@@ -13,22 +13,43 @@ configure_proxy() {
         read -r proxy_url
         
         if [[ -n $proxy_url ]]; then
-            echo "Configuring proxy settings..."
-            export HTTP_PROXY="$proxy_url"
-            export HTTPS_PROXY="$proxy_url"
-            export http_proxy="$proxy_url"
-            export https_proxy="$proxy_url"
+              export proxy_url
+              echo "Proxy scope:"
+            echo "1. Global proxy (affects all commands and persists in shell config)"
+            echo "2. npm-only proxy (only affects npm, no global environment variables)"
+            read -r proxy_scope_choice
             
-            # Configure npm to use proxy
-            npm config set proxy "$proxy_url"
-            npm config set https-proxy "$proxy_url"
-            
-            echo "✅ Proxy configured: $proxy_url"
+            if [[ $proxy_scope_choice == "2" ]]; then
+                proxy_scope="npm_only"
+export proxy_scope
+                echo "Configuring npm-only proxy..."
+                # Only configure npm proxy, no environment variables
+                npm config set proxy "$proxy_url"
+                npm config set https-proxy "$proxy_url"
+                echo "✅ npm proxy configured: $proxy_url"
+            else
+                proxy_scope="global"
+export proxy_scope
+                echo "Configuring global proxy..."
+                export HTTP_PROXY="$proxy_url"
+                export HTTPS_PROXY="$proxy_url"
+                export http_proxy="$proxy_url"
+                export https_proxy="$proxy_url"
+                
+                # Configure npm to use proxy
+                npm config set proxy "$proxy_url"
+                npm config set https-proxy "$proxy_url"
+                
+                echo "✅ Global proxy configured: $proxy_url"
+            fi
         else
             echo "⚠️  No proxy URL provided, continuing without proxy..."
+            proxy_scope="none"
+export proxy_scope
         fi
     else
         echo "Continuing without proxy configuration..."
+        proxy_scope="none"
     fi
 }
 
@@ -40,7 +61,11 @@ install_nodejs() {
             echo "🚀 Installing Node.js on Unix/Linux/macOS..."
             
             echo "📥 Downloading and installing nvm..."
-            curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+            if [[ $proxy_scope == "npm_only" && -n $proxy_url ]]; then
+                curl --proxy "$proxy_url" -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+            else
+                curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+            fi
             
             echo "🔄 Loading nvm environment..."
             \. "$HOME/.nvm/nvm.sh"
@@ -64,6 +89,16 @@ install_nodejs() {
 
 # Configure proxy first
 configure_proxy
+
+# Set up cleanup for global proxy settings
+cleanup_global_proxy() {
+    if [[ $proxy_scope == "global" ]]; then
+        echo "Cleaning up global proxy settings..."
+        unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy
+        echo "✅ Global proxy settings removed"
+    fi
+}
+trap cleanup_global_proxy EXIT
 
 # Install Claude Code globally first
 echo "📦 Installing Claude Code globally..."
@@ -158,15 +193,7 @@ else
     echo "✅ Environment variables added to $rc_file"
 fi
 
-# Add proxy configuration to rc file if proxy was configured
-if [[ -n $HTTP_PROXY ]]; then
-    echo "# Proxy configuration for Claude Code" >> "$rc_file"
-    echo "export HTTP_PROXY=$HTTP_PROXY" >> "$rc_file"
-    echo "export HTTPS_PROXY=$HTTPS_PROXY" >> "$rc_file"
-    echo "export http_proxy=$http_proxy" >> "$rc_file"
-    echo "export https_proxy=$https_proxy" >> "$rc_file"
-    echo "✅ Proxy configuration added to $rc_file"
-fi
+
 
 echo ""
 echo "🎉 Installation completed successfully!"
