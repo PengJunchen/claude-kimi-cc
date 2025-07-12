@@ -2,6 +2,36 @@
 
 set -e
 
+# Proxy configuration prompt
+configure_proxy() {
+    echo "🔧 Proxy Configuration"
+    echo "Do you want to use a proxy? (y/n)"
+    read -r use_proxy
+    
+    if [[ $use_proxy =~ ^[Yy]$ ]]; then
+        echo "Please enter your proxy URL (e.g., http://proxy.company.com:8080 or http://user:pass@proxy:8080):"
+        read -r proxy_url
+        
+        if [[ -n $proxy_url ]]; then
+            echo "Configuring proxy settings..."
+            export HTTP_PROXY="$proxy_url"
+            export HTTPS_PROXY="$proxy_url"
+            export http_proxy="$proxy_url"
+            export https_proxy="$proxy_url"
+            
+            # Configure npm to use proxy
+            npm config set proxy "$proxy_url"
+            npm config set https-proxy "$proxy_url"
+            
+            echo "✅ Proxy configured: $proxy_url"
+        else
+            echo "⚠️  No proxy URL provided, continuing without proxy..."
+        fi
+    else
+        echo "Continuing without proxy configuration..."
+    fi
+}
+
 install_nodejs() {
     local platform=$(uname -s)
     
@@ -32,6 +62,14 @@ install_nodejs() {
     esac
 }
 
+# Configure proxy first
+configure_proxy
+
+# Install Claude Code globally first
+echo "📦 Installing Claude Code globally..."
+npm install -g @anthropic-ai/claude-code
+
+# Then proceed with the rest of the installation
 # Check if Node.js is already installed and version is >= 18
 if command -v node >/dev/null 2>&1; then
     current_version=$(node -v | sed 's/v//')
@@ -59,14 +97,20 @@ fi
 # Configure Claude Code to skip onboarding
 echo "Configuring Claude Code to skip onboarding..."
 node --eval '
+    const fs = require("fs");
+    const path = require("path");
+    const os = require("os");
+    
     const homeDir = os.homedir(); 
     const filePath = path.join(homeDir, ".claude.json");
+    
     if (fs.existsSync(filePath)) {
         const content = JSON.parse(fs.readFileSync(filePath, "utf-8"));
-        fs.writeFileSync(filePath,JSON.stringify({ ...content, hasCompletedOnboarding: true }, 2), "utf-8");
+        fs.writeFileSync(filePath, JSON.stringify({ ...content, hasCompletedOnboarding: true }, null, 2), "utf-8");
     } else {
-        fs.writeFileSync(filePath,JSON.stringify({ hasCompletedOnboarding: true }), "utf-8");
-    }'
+        fs.writeFileSync(filePath, JSON.stringify({ hasCompletedOnboarding: true }, null, 2), "utf-8");
+    }
+'
 
 # Prompt user for API key
 echo "🔑 Please enter your Moonshot API key:"
@@ -114,6 +158,16 @@ else
     echo "✅ Environment variables added to $rc_file"
 fi
 
+# Add proxy configuration to rc file if proxy was configured
+if [[ -n $HTTP_PROXY ]]; then
+    echo "# Proxy configuration for Claude Code" >> "$rc_file"
+    echo "export HTTP_PROXY=$HTTP_PROXY" >> "$rc_file"
+    echo "export HTTPS_PROXY=$HTTPS_PROXY" >> "$rc_file"
+    echo "export http_proxy=$http_proxy" >> "$rc_file"
+    echo "export https_proxy=$https_proxy" >> "$rc_file"
+    echo "✅ Proxy configuration added to $rc_file"
+fi
+
 echo ""
 echo "🎉 Installation completed successfully!"
 echo ""
@@ -122,3 +176,7 @@ echo "   source $rc_file"
 echo ""
 echo "🚀 Then you can start using Claude Code with:"
 echo "   claude"
+echo ""
+if [[ -n $HTTP_PROXY ]]; then
+    echo "📡 Proxy is configured: $HTTP_PROXY"
+fi
