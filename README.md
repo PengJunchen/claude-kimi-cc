@@ -1,7 +1,7 @@
 # Claude Kimi CC
 
 本项目基于 [Kimi CC项目](https://github.com/LLM-Red-Team/kimi-cc) 
-脚本由Claude Code + Kimi-👁-0711-preview修改完成，仅在mac下验证
+脚本由Claude Code + Kimi-K2-0711-preview修改完成，仅在mac下验证
 
 ### 功能说明
 - 自动配置Proxy
