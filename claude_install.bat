@@ -5,7 +5,7 @@ setlocal enabledelayedexpansion
 :: This script installs Node.js (if needed), Claude Code, and configures the environment
 
 echo ================================================
-echo 🚀 Claude Code Installation for Windows
+echo Claude Code Installation for Windows
 echo ================================================
 echo.
 
@@ -13,74 +13,86 @@ echo.
 echo Checking administrator privileges...
 net session >nul 2>&1
 if %errorlevel% neq 0 (
-    echo ❌ Please run this script as Administrator
-    pause
+    echo Please run this script as Administrator
+    :: :: pause
     exit /b 1
 )
 
 :: Proxy configuration
-echo 🔧 Proxy Configuration
+echo Proxy Configuration
 echo Do you want to use a proxy? (y/n)
 set /p use_proxy=
 
+set proxy_scope=none
+set proxy_url=
+
 if /i "%use_proxy%"=="y" (
-    echo Please enter your proxy URL (e.g., http://proxy.company.com:8080 or http://user:pass@proxy:8080):
+    echo Please enter your proxy URL (e.g., http://proxy.company.com:8080 or http://user:pass@proxy:8080^):
     set /p proxy_url=
     
-    if not "%proxy_url%"=="" (
-        set proxy_url=%proxy_url%
+    if not "!proxy_url!"=="" (
         echo.
         echo Proxy scope:
-        echo 1. Global proxy (affects all commands and persists in system environment)
-        echo 2. npm-only proxy (only affects npm, no global environment variables)
+        echo 1. Global proxy (affects all commands and persists in system environment^)
+        echo 2. npm-only proxy (only affects npm, no global environment variables^)
         set /p proxy_scope_choice=
         
-        if "%proxy_scope_choice%"=="2" (
+        if "!proxy_scope_choice!"=="2" (
             set proxy_scope=npm_only
             echo Configuring npm-only proxy...
-            call npm config set proxy "%proxy_url%"
-            call npm config set https-proxy "%proxy_url%"
-            echo ✅ npm proxy configured: %proxy_url%
+            call npm config set proxy "!proxy_url!"
+            call npm config set https-proxy "!proxy_url!"
+            echo npm proxy configured: !proxy_url!
         ) else (
             set proxy_scope=global
             echo Configuring global proxy...
-            set HTTP_PROXY=%proxy_url%
-            set HTTPS_PROXY=%proxy_url%
-            set http_proxy=%proxy_url%
-            set https_proxy=%proxy_url%
+            set "HTTP_PROXY=!proxy_url!"
+            set "HTTPS_PROXY=!proxy_url!"
+            set "http_proxy=!proxy_url!"
+            set "https_proxy=!proxy_url!"
             
             :: Configure npm to use proxy
-            call npm config set proxy "%proxy_url%"
-            call npm config set https-proxy "%proxy_url%"
+            call npm config set proxy "!proxy_url!"
+            call npm config set https-proxy "!proxy_url!"
             
-            echo ✅ Global proxy configured: %proxy_url%
+            echo Global proxy configured: !proxy_url!
         )
     ) else (
-        echo ⚠️  No proxy URL provided, continuing without proxy...
-        set proxy_scope=none
+        echo No proxy URL provided, continuing without proxy...
     )
 ) else (
     echo Continuing without proxy configuration...
-    set proxy_scope=none
 )
 
-:: Function to install Node.js using nvm-windows
-goto :install_nodejs
+goto :after_proxy
+:after_proxy
 
-:install_nodejs
 echo.
-echo 🚀 Installing Node.js on Windows...
+echo Installing Node.js on Windows...
 
 :: Check if Node.js is already installed and version >= 18
 node --version >nul 2>&1
 if %errorlevel% equ 0 (
-    for /f "tokens=1 delims=v" %%i in ('node --version') do set current_version=%%i
-    for /f "tokens=1 delims=." %%i in ("%current_version%") do set major_version=%%i
+    :: Capture and display raw version output
+      for /f "usebackq delims=" %%i in (`node --version 2^>^&1`) do (
+          echo Raw Node.js version output: %%i
+          set "raw_version=%%i"
+      )
+    :: Extract major version directly by splitting version string
+          for /f "delims=" %%a in ('powershell -Command "$raw = \"!raw_version!\"; $cleaned = $raw.TrimStart('vV'); $dotIndex = $cleaned.IndexOf('.'); if ($dotIndex -ge 0) { $major = $cleaned.Substring(0, $dotIndex) } else { $major = $cleaned }; if ([int]::TryParse($major, [ref]$null)) { $major } else { Write-Error \"Invalid version format: $raw\"; exit 1 }"') do set "major_version=%%a"
+      )
+        :: Validate major version extraction
+        if not defined major_version (
+            echo Error: Failed to extract Node.js major version. Please ensure Node.js is installed correctly.
+            exit /b 1
+        )
+        echo Extracted major version: !major_version!
     
-    if %major_version% geq 18 (
-        echo Node.js is already installed: v%current_version%
-    ) else (
-        echo Node.js v%current_version% is installed but version ^< 18. Upgrading...
+    if !major_version! geq 18 (
+          echo Node.js is already installed: v!major_version!
+          goto :install_claude
+      ) else (
+        echo Node.js v!major_version! is installed but version ^< 18. Upgrading...
         goto :install_node_with_nvm
     )
 ) else (
@@ -92,55 +104,240 @@ if %errorlevel% equ 0 (
 goto :install_claude
 
 :install_node_with_nvm
-echo 📥 Checking for nvm-windows...
+echo Checking for nvm-windows...
 
 :: Check if nvm is installed
 nvm version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo 📥 Downloading and installing nvm-windows...
+    echo Downloading and installing nvm-windows...
     
     :: Download nvm-windows installer
-    if "%proxy_scope%"=="npm_only" if not "%proxy_url%"=="" (
-        powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $webClient = New-Object System.Net.WebClient; $webClient.Proxy = New-Object System.Net.WebProxy('%proxy_url%'); $webClient.DownloadFile('https://github.com/coreybutler/nvm-windows/releases/download/1.1.12/nvm-setup.exe', '%TEMP%\nvm-setup.exe')"
-    ) else (
-        powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://github.com/coreybutler/nvm-windows/releases/download/1.1.12/nvm-setup.exe' -OutFile '%TEMP%\nvm-setup.exe'"
+    :: Use WebClient with proxy credential support
+    powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $webClient = New-Object System.Net.WebClient; $webClient.Timeout = 300000; Write-Host 'Downloading nvm-setup.exe from GitHub...'; if ('!proxy_url!' -ne '') { Write-Host 'Using proxy: !proxy_url!'; $proxy = New-Object System.Net.WebProxy('!proxy_url!', $true); $creds = [System.Net.CredentialCache]::DefaultCredentials; if ($proxy.Address.UserInfo) { $userPass = $proxy.Address.UserInfo -split ':'; $creds = New-Object System.Net.NetworkCredential($userPass[0], $userPass[1]); Write-Host 'Using proxy credentials for user: ' $userPass[0]; } $webClient.Proxy = $proxy; $webClient.Proxy.Credentials = $creds; }; try { $webClient.DownloadFile('https://github.com/coreybutler/nvm-windows/releases/download/1.1.12/nvm-setup.exe', '%TEMP%\nvm-setup.exe'); Write-Host 'Download completed successfully'; } catch { Write-Host 'Download failed: ' $_.Exception.Message; Write-Host 'Attempting alternative download...'; try { $webClient.DownloadFile('https://cdn.npmmirror.com/binaries/nvm-windows/1.1.12/nvm-setup.exe', '%TEMP%\nvm-setup.exe'); Write-Host 'Alternative download completed successfully'; } catch { Write-Host 'Alternative download failed: ' $_.Exception.Message; exit 1 } }"
+    if %errorlevel% neq 0 (
+        echo Failed to download nvm-setup.exe. Check your network/proxy settings.
+        exit /b 1
     )
     
+    :: Check if installer exists
+    if not exist "%TEMP%\nvm-setup.exe" (
+        echo Failed to download nvm-setup.exe
+        exit /b 1
+    )
     :: Run the installer
-    %TEMP%\nvm-setup.exe
+    "%TEMP%\nvm-setup.exe" || (echo Failed to run installer & exit /b 1)
     
     :: Refresh environment variables
-    call refreshenv.cmd >nul 2>&1 || (
-        echo ⚠️  Please restart your terminal and run this script again
-        pause
-        exit /b 1
+    :: Refresh environment variables and add NVM to PATH
+    set "NVM_HOME=%USERPROFILE%\AppData\Roaming\nvm"
+    :: Get NVM root directory with error handling
+      for /f "tokens=*" %%i in ('nvm root 2^>nul') do set "NVM_ROOT=%%i"
+      if not defined NVM_ROOT (
+          echo Failed to determine NVM root directory
+          set "NVM_ROOT=%USERPROFILE%\AppData\Roaming\nvm"
+          echo Using default NVM root: !NVM_ROOT!
+      )
+    set "NVM_SYMLINK=%NVM_ROOT%\v22.17.0"
+    set "PATH=%NVM_HOME%;%NVM_SYMLINK%;%PATH%"
+    :: Verify nvm installation
+    nvm version >nul 2>&1
+    if %errorlevel% neq 0 (
+        echo nvm installation not detected. Attempting to locate...
+        if exist "%NVM_HOME%\nvm.exe" (
+            set "PATH=%NVM_HOME%;%PATH%"
+            nvm version >nul 2>&1 || (
+                echo Failed to initialize nvm. Please restart your terminal.
+                pause
+                exit /b 1
+            )
+        ) else (
+            echo nvm.exe not found in default path. Please reinstall nvm-windows.
+            pause
+            exit /b 1
+        )
     )
 )
 
-echo 📦 Downloading and installing Node.js v22...
-nvm install 22
+echo Downloading and installing Node.js v22...
+nvm install 22 || (
+        echo Failed to install Node.js v22 using nvm
+        exit /b 1
+    )
+nvm use 22 || (
+        echo Failed to set Node.js v22 as active version
+        exit /b 1
+    )
 nvm use 22
 
-echo ✅ Node.js installation completed!
+echo Node.js installation completed!
 node --version
-echo ✅ npm version:
+echo npm version:
 npm --version
 
 goto :install_claude
 
 :install_claude
 echo.
-echo 📦 Installing Claude Code globally...
+echo Installing Claude Code globally...
+  echo [DEBUG] Step 1/7: Capture current directory
+  set "current_dir=%cd%"
+  setlocal disabledelayedexpansion 
+  echo [DEBUG] Current directory: "!current_dir!"
+  endlocal
 
-:: Check if Claude Code is already installed
-claude --version >nul 2>&1
-if %errorlevel% equ 0 (
-    echo Claude Code is already installed: 
-    claude --version
-) else (
-    echo Claude Code not found. Installing...
-    call npm install -g @anthropic-ai/claude-code
-)
+  echo [DEBUG] Step 2/7: Check npm availability
+  where npm >nul 2>&1
+  if !errorlevel! neq 0 (
+      echo [ERROR] npm not found in PATH. Please check Node.js installation.
+      pause
+      exit /b 1
+  )
+
+  echo [DEBUG] Step 3/7: Verify npm execution
+  echo [DEBUG] Current PATH: %PATH%
+  echo [DEBUG] Searching for npm executable...
+  set "npm_temp_file=%TEMP%\npm_locations.txt"
+  echo [DEBUG] Verifying temp directory: "%TEMP%"
+  if not exist "%TEMP%" (
+      echo [ERROR] Temporary directory does not exist: "%TEMP%"
+      pause
+      exit /b 1
+  )
+  echo [DEBUG] Testing temp file write access...
+  echo test > "!npm_temp_file!" 2>&1
+  if !errorlevel! neq 0 (
+      echo [ERROR] No write permissions in temp directory: "%TEMP%"
+      pause
+      exit /b 1
+  )
+  del "!npm_temp_file!" >nul 2>&1
+  C:\Windows\System32\where.exe npm > "!npm_temp_file!" 2>&1
+  set "where_exit_code=!errorlevel!"
+  echo [DEBUG] where command exit code: !where_exit_code!
+  echo [DEBUG] where command output:
+  type "!npm_temp_file!"
+  
+  if !where_exit_code! neq 0 (
+      echo [ERROR] where command failed to find npm (exit code: !where_exit_code!)
+      type "!npm_temp_file!"
+      pause
+      exit /b 1
+  )
+  
+  echo [DEBUG] where command output stored in: "!npm_temp_file!"
+  set "file_size=0"
+  if exist "!npm_temp_file!" (
+      for %%A in ("!npm_temp_file!") do set "file_size=%%~zA"
+  ) else (
+      echo [DEBUG] npm temp file does not exist
+  )
+  echo [DEBUG] where output file size: !file_size! bytes
+  
+  if !file_size! leq 2 (
+      echo [ERROR] where command returned success but no output
+      pause
+      exit /b 1
+  )
+  
+  set "expanded_temp_file=!npm_temp_file!"
+    setlocal disabledelayedexpansion
+    set "npm_found=0"
+    for /f "usebackq delims=" %%i in (`type "%expanded_temp_file%" ^| findstr /r /v "^[ 	]*$ ^ERROR:"`) do (
+        set "npm_found=1"
+        echo [DEBUG] Found npm candidate: %%i
+        set "npm_path=%%i"
+    )
+    endlocal ^& set "npm_path=%%npm_path%%" & set "npm_found=%%npm_found%%"
+    
+    if !npm_found! equ 0 (
+        echo [ERROR] No valid npm candidates found after filtering empty lines
+        pause
+        exit /b 1
+    )
+    
+    del "!npm_temp_file!" >nul 2>&1
+  echo [DEBUG] Found npm at: "!npm_path!"
+    echo [DEBUG] Verifying npm path exists
+    if not exist "!npm_path!" (
+        echo [ERROR] npm executable not found at discovered path: "!npm_path!"
+        pause
+        exit /b 1
+    )
+    echo [DEBUG] Verifying npm path is an executable
+    if /i "!npm_path:~-4!" neq ".exe" (
+        echo [ERROR] npm path is not an executable file: "!npm_path!"
+        pause
+        exit /b 1
+    )
+    if not defined npm_path (
+      echo [ERROR] Failed to locate npm executable
+  echo [ERROR] Please ensure Node.js is installed (https://nodejs.org/) and npm is in your PATH
+  echo [ERROR] Current PATH: %PATH%
+      pause
+      exit /b 1
+  )
+  if not exist "!npm_path!" (
+      echo [ERROR] npm path does not exist: "!npm_path!"
+      pause
+      exit /b 1
+  )
+  echo [DEBUG] Before npm command execution
+  echo [DEBUG] Executing: "!npm_path!" --version
+  echo [DEBUG] Redirecting npm output to log file
+  "!npm_path!" --version > "%TEMP%\npm_version.log" 2>&1
+  set "npm_exit_code=!errorlevel!"
+  echo [DEBUG] npm command exit code: !npm_exit_code!
+  echo [DEBUG] npm version output:
+  if exist "%TEMP%\npm_version.log" (
+      type "%TEMP%\npm_version.log"
+      for %%A in ("%TEMP%\npm_version.log") do (
+          echo [DEBUG] Log file size: %%~zA bytes
+          if %%~zA equ 0 (
+              echo [WARNING] npm log file is empty
+          )
+      )
+  ) else (
+      echo [ERROR] npm log file not created
+  )
+  echo [DEBUG] End of npm version output
+  echo [DEBUG] npm execution output complete
+  pause
+  echo [DEBUG] npm exit code before check: !errorlevel!
+  echo [DEBUG] After npm command execution, exit code: !npm_exit_code!
+  if !errorlevel! neq 0 (
+      echo [ERROR] npm is in PATH but failed to execute
+      pause
+      exit /b !errorlevel!
+  )
+
+  echo [DEBUG] Step 4/7: Show npm version
+  npm --version
+
+  echo [DEBUG] Step 5/7: Execute npm install
+  echo [DEBUG] Running: npm install -g @anthropic-ai/claude-code --verbose
+  call npm install -g @anthropic-ai/claude-code --verbose
+  echo [DEBUG] npm install exit code: !errorlevel!
+  if !errorlevel! neq 0 (
+      echo [ERROR] npm installation failed with code !errorlevel!
+      pause
+      exit /b !errorlevel!
+  )
+
+  echo [DEBUG] Step 6/7: Verify global package list
+  npm list -g --depth=0
+
+  echo [DEBUG] Step 7/7: Check Claude in PATH
+  where claude >nul 2>&1
+  if !errorlevel! equ 0 (
+      echo [DEBUG] Claude found in PATH
+      claude --version
+  ) else (
+      echo [ERROR] Claude not found in PATH after installation
+      echo [DEBUG] npm global path: && npm root -g
+      pause
+  )
+
+  echo [DEBUG] Claude installation section completed successfully
 
 :: Configure Claude Code to skip onboarding
 echo.
@@ -159,7 +356,7 @@ if (Test-Path $filePath) {
 
 :: Prompt user for API key
 echo.
-echo 🔑 Please enter your Moonshot API key:
+echo Please enter your Moonshot API key:
 echo    You can get your API key from: https://platform.moonshot.cn/console/api-keys
 echo    Note: The input is hidden for security. Please paste your API key directly.
 echo.
@@ -176,14 +373,14 @@ set /p api_key=<%TEMP%\claude_api_key.txt
 del %TEMP%\claude_api_key.txt
 
 if "%api_key%"=="" (
-    echo ⚠️  API key cannot be empty. Please run the script again.
+    echo API key cannot be empty. Please run the script again.
     pause
     exit /b 1
 )
 
 :: Add environment variables to user profile
 echo.
-echo 📝 Adding environment variables to user profile...
+echo Adding environment variables to user profile...
 
 :: Check if variables already exist
 set key_exists=0
@@ -192,9 +389,9 @@ for /f "delims=" %%i in ('reg query "HKEY_CURRENT_USER\Environment" /v ANTHROPIC
 )
 
 if %key_exists%==1 (
-    echo ⚠️  Environment variables already exist. Updating...
+    echo Environment variables already exist. Updating...
 ) else (
-    echo ✅ Adding new environment variables...
+    echo Adding new environment variables...
 )
 
 :: Set user environment variables
@@ -214,17 +411,17 @@ if "%proxy_scope%"=="global" (
 
 echo.
 echo ================================================
-echo 🎉 Installation completed successfully!
+echo Installation completed successfully!
 echo ================================================
 echo.
-echo 🔄 Please restart your terminal for changes to take effect
+echo Please restart your terminal for changes to take effect
 echo.
-echo 🚀 Then you can start using Claude Code with:
+echo Then you can start using Claude Code with:
 echo    claude
 echo.
 
-if "%proxy_scope%"=="global" if not "%proxy_url%"=="" (
-    echo 📡 Proxy is configured: %proxy_url%
+if "%proxy_scope%"=="global" if not "!proxy_url!"=="" (
+    echo Proxy is configured: !proxy_url!
     echo.
 )
 
