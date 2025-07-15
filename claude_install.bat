@@ -14,7 +14,7 @@ echo Checking administrator privileges...
 net session >nul 2>&1
 if %errorlevel% neq 0 (
     echo Please run this script as Administrator
-    :: :: pause
+
     exit /b 1
 )
 
@@ -179,180 +179,28 @@ goto :install_claude
 :install_claude
 echo.
 echo Installing Claude Code globally...
-  echo [DEBUG] Step 1/7: Capture current directory
-  set "current_dir=%cd%"
-  setlocal disabledelayedexpansion 
-  echo [DEBUG] Current directory: "!current_dir!"
-  endlocal
+call npm install -g @anthropic-ai/claude-code --verbose
 
-  echo [DEBUG] Step 2/7: Check npm availability
-  where npm >nul 2>&1
-  if !errorlevel! neq 0 (
-      echo [ERROR] npm not found in PATH. Please check Node.js installation.
-      pause
-      exit /b 1
-  )
-
-  echo [DEBUG] Step 3/7: Verify npm execution
-  echo [DEBUG] Current PATH: %PATH%
-  echo [DEBUG] Searching for npm executable...
-  set "npm_temp_file=%TEMP%\npm_locations.txt"
-  echo [DEBUG] Verifying temp directory: "%TEMP%"
-  if not exist "%TEMP%" (
-      echo [ERROR] Temporary directory does not exist: "%TEMP%"
-      pause
-      exit /b 1
-  )
-  echo [DEBUG] Testing temp file write access...
-  echo test > "!npm_temp_file!" 2>&1
-  if !errorlevel! neq 0 (
-      echo [ERROR] No write permissions in temp directory: "%TEMP%"
-      pause
-      exit /b 1
-  )
-  del "!npm_temp_file!" >nul 2>&1
-  C:\Windows\System32\where.exe npm > "!npm_temp_file!" 2>&1
-  set "where_exit_code=!errorlevel!"
-  echo [DEBUG] where command exit code: !where_exit_code!
-  echo [DEBUG] where command output:
-  type "!npm_temp_file!"
-  
-  if !where_exit_code! neq 0 (
-      echo [ERROR] where command failed to find npm (exit code: !where_exit_code!)
-      type "!npm_temp_file!"
-      pause
-      exit /b 1
-  )
-  
-  echo [DEBUG] where command output stored in: "!npm_temp_file!"
-  set "file_size=0"
-  if exist "!npm_temp_file!" (
-      for %%A in ("!npm_temp_file!") do set "file_size=%%~zA"
-  ) else (
-      echo [DEBUG] npm temp file does not exist
-  )
-  echo [DEBUG] where output file size: !file_size! bytes
-  
-  if !file_size! leq 2 (
-      echo [ERROR] where command returned success but no output
-      pause
-      exit /b 1
-  )
-  
-  set "expanded_temp_file=!npm_temp_file!"
-    setlocal disabledelayedexpansion
-    set "npm_found=0"
-    for /f "usebackq delims=" %%i in (`type "%expanded_temp_file%" ^| findstr /r /v "^[ 	]*$ ^ERROR:"`) do (
-        set "npm_found=1"
-        echo [DEBUG] Found npm candidate: %%i
-        set "npm_path=%%i"
-    )
-    endlocal ^& set "npm_path=%%npm_path%%" & set "npm_found=%%npm_found%%"
-    
-    if !npm_found! equ 0 (
-        echo [ERROR] No valid npm candidates found after filtering empty lines
-        pause
-        exit /b 1
-    )
-    
-    del "!npm_temp_file!" >nul 2>&1
-  echo [DEBUG] Found npm at: "!npm_path!"
-    echo [DEBUG] Verifying npm path exists
-    if not exist "!npm_path!" (
-        echo [ERROR] npm executable not found at discovered path: "!npm_path!"
-        pause
-        exit /b 1
-    )
-    echo [DEBUG] Verifying npm path is an executable
-    if /i "!npm_path:~-4!" neq ".exe" (
-        echo [ERROR] npm path is not an executable file: "!npm_path!"
-        pause
-        exit /b 1
-    )
-    if not defined npm_path (
-      echo [ERROR] Failed to locate npm executable
-  echo [ERROR] Please ensure Node.js is installed (https://nodejs.org/) and npm is in your PATH
-  echo [ERROR] Current PATH: %PATH%
-      pause
-      exit /b 1
-  )
-  if not exist "!npm_path!" (
-      echo [ERROR] npm path does not exist: "!npm_path!"
-      pause
-      exit /b 1
-  )
-  echo [DEBUG] Before npm command execution
-  echo [DEBUG] Executing: "!npm_path!" --version
-  echo [DEBUG] Redirecting npm output to log file
-  "!npm_path!" --version > "%TEMP%\npm_version.log" 2>&1
-  set "npm_exit_code=!errorlevel!"
-  echo [DEBUG] npm command exit code: !npm_exit_code!
-  echo [DEBUG] npm version output:
-  if exist "%TEMP%\npm_version.log" (
-      type "%TEMP%\npm_version.log"
-      for %%A in ("%TEMP%\npm_version.log") do (
-          echo [DEBUG] Log file size: %%~zA bytes
-          if %%~zA equ 0 (
-              echo [WARNING] npm log file is empty
-          )
-      )
-  ) else (
-      echo [ERROR] npm log file not created
-  )
-  echo [DEBUG] End of npm version output
-  echo [DEBUG] npm execution output complete
-  pause
-  echo [DEBUG] npm exit code before check: !errorlevel!
-  echo [DEBUG] After npm command execution, exit code: !npm_exit_code!
-  if !errorlevel! neq 0 (
-      echo [ERROR] npm is in PATH but failed to execute
-      pause
-      exit /b !errorlevel!
-  )
-
-  echo [DEBUG] Step 4/7: Show npm version
-  npm --version
-
-  echo [DEBUG] Step 5/7: Execute npm install
-  echo [DEBUG] Running: npm install -g @anthropic-ai/claude-code --verbose
-  call npm install -g @anthropic-ai/claude-code --verbose
-  echo [DEBUG] npm install exit code: !errorlevel!
   if !errorlevel! neq 0 (
       echo [ERROR] npm installation failed with code !errorlevel!
       pause
       exit /b !errorlevel!
   )
-
-  echo [DEBUG] Step 6/7: Verify global package list
-  npm list -g --depth=0
-
-  echo [DEBUG] Step 7/7: Check Claude in PATH
   where claude >nul 2>&1
   if !errorlevel! equ 0 (
-      echo [DEBUG] Claude found in PATH
-      claude --version
+      call claude --version
   ) else (
       echo [ERROR] Claude not found in PATH after installation
-      echo [DEBUG] npm global path: && npm root -g
+      npm root -g
       pause
   )
 
-  echo [DEBUG] Claude installation section completed successfully
+
 
 :: Configure Claude Code to skip onboarding
 echo.
 echo Configuring Claude Code to skip onboarding...
-powershell -Command "
-$homeDir = $env:USERPROFILE;
-$filePath = Join-Path $homeDir '.claude.json';
-
-if (Test-Path $filePath) {
-    $content = Get-Content $filePath -Raw | ConvertFrom-Json;
-    $content | Add-Member -MemberType NoteProperty -Name 'hasCompletedOnboarding' -Value $true -Force;
-    $content | ConvertTo-Json -Depth 10 | Set-Content $filePath;
-} else {
-    @{ hasCompletedOnboarding = $true } | ConvertTo-Json -Depth 10 | Set-Content $filePath;
-}"
+powershell -Command "$homeDir = $env:USERPROFILE; $filePath = Join-Path $homeDir '.claude.json'; if (Test-Path $filePath) { $content = Get-Content $filePath -Raw | ConvertFrom-Json; $content | Add-Member -MemberType NoteProperty -Name 'hasCompletedOnboarding' -Value $true -Force; $content | ConvertTo-Json -Depth 10 | Set-Content $filePath; } else { @{ hasCompletedOnboarding = $true } | ConvertTo-Json -Depth 10 | Set-Content $filePath; }"
 
 :: Prompt user for API key
 echo.
@@ -362,14 +210,10 @@ echo    Note: The input is hidden for security. Please paste your API key direct
 echo.
 
 :: Create a temporary PowerShell script to get secure input
-powershell -Command "
-$apiKey = Read-Host 'Enter your API key' -AsSecureString;
-$plainApiKey = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($apiKey));
-$plainApiKey | Out-File -FilePath '%TEMP%\claude_api_key.txt' -Encoding UTF8;
-"
+powershell -Command "$apiKey = Read-Host 'Enter your API key' -AsSecureString; $plainApiKey = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($apiKey)); $plainApiKey | Out-File -FilePath '%TEMP%\claude_api_key.txt' -Encoding ASCII -NoNewline;"
 
 :: Read the API key from file
-set /p api_key=<%TEMP%\claude_api_key.txt
+for /f "delims=" %%a in ('type %TEMP%\claude_api_key.txt') do set "api_key=%%a"
 del %TEMP%\claude_api_key.txt
 
 if "%api_key%"=="" (
@@ -396,7 +240,7 @@ if %key_exists%==1 (
 
 :: Set user environment variables
 setx ANTHROPIC_BASE_URL "https://api.moonshot.cn/anthropic/" >nul
-setx ANTHROPIC_API_KEY "%api_key%" >nul
+setx ANTHROPIC_API_KEY "!api_key!" >nul
 
 :: Clean up global proxy if configured
 if "%proxy_scope%"=="global" (
